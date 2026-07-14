@@ -22,6 +22,9 @@ public sealed class ClinicFlowDbContext : DbContext
         
     public DbSet<Patient> Patients =>
         Set<Patient>();
+    
+    public DbSet<Appointment> Appointments =>
+        Set<Appointment>();
 
     protected override void OnModelCreating(
         ModelBuilder modelBuilder
@@ -33,6 +36,7 @@ public sealed class ClinicFlowDbContext : DbContext
         ConfigureDoctor(modelBuilder);
         ConfigureDoctorAvailability(modelBuilder);
         ConfigurePatient(modelBuilder);
+        ConfigureAppointment(modelBuilder);
     }
 
     private static void ConfigureSpecialty(
@@ -297,4 +301,149 @@ public sealed class ClinicFlowDbContext : DbContext
             .HasColumnName("created_at_utc")
             .IsRequired();
     }
+    private static void ConfigureAppointment(
+    ModelBuilder modelBuilder
+)
+{
+    var appointment = modelBuilder.Entity<Appointment>();
+
+    appointment.ToTable(
+        "appointments",
+        tableBuilder =>
+        {
+            tableBuilder.HasCheckConstraint(
+                "ck_appointments_time_range",
+                "start_time < end_time"
+            );
+
+            tableBuilder.HasCheckConstraint(
+                "ck_appointments_status",
+                "status BETWEEN 1 AND 4"
+            );
+        }
+    );
+
+    appointment.HasKey(item => item.Id);
+
+    appointment
+        .Property(item => item.Id)
+        .HasColumnName("id");
+
+    appointment
+        .Property(item => item.DoctorId)
+        .HasColumnName("doctor_id")
+        .IsRequired();
+
+    appointment
+        .Property(item => item.PatientId)
+        .HasColumnName("patient_id")
+        .IsRequired();
+
+    appointment
+        .Property(item => item.DoctorAvailabilityId)
+        .HasColumnName("doctor_availability_id")
+        .IsRequired();
+
+    appointment
+        .Property(item => item.AppointmentDate)
+        .HasColumnName("appointment_date")
+        .HasColumnType("date")
+        .IsRequired();
+
+    appointment
+        .Property(item => item.StartTime)
+        .HasColumnName("start_time")
+        .HasColumnType("time without time zone")
+        .IsRequired();
+
+    appointment
+        .Property(item => item.EndTime)
+        .HasColumnName("end_time")
+        .HasColumnType("time without time zone")
+        .IsRequired();
+
+    appointment
+        .Property(item => item.Status)
+        .HasColumnName("status")
+        .HasConversion<int>()
+        .IsRequired();
+
+    appointment
+        .Property(item => item.Notes)
+        .HasColumnName("notes")
+        .HasMaxLength(500);
+
+    appointment
+        .Property(item => item.CancellationReason)
+        .HasColumnName("cancellation_reason")
+        .HasMaxLength(300);
+
+    appointment
+        .Property(item => item.CreatedAtUtc)
+        .HasColumnName("created_at_utc")
+        .IsRequired();
+
+    appointment
+        .Property(item => item.CancelledAtUtc)
+        .HasColumnName("cancelled_at_utc");
+
+    appointment
+        .Property(item => item.CompletedAtUtc)
+        .HasColumnName("completed_at_utc");
+
+    appointment
+        .HasIndex(item => new
+        {
+            item.DoctorId,
+            item.AppointmentDate,
+            item.StartTime
+        })
+        .IsUnique()
+        .HasFilter("status = 1")
+        .HasDatabaseName(
+            "ux_appointments_doctor_date_start_scheduled"
+        );
+
+    appointment
+        .HasIndex(item => new
+        {
+            item.PatientId,
+            item.AppointmentDate,
+            item.StartTime
+        })
+        .IsUnique()
+        .HasFilter("status = 1")
+        .HasDatabaseName(
+            "ux_appointments_patient_date_start_scheduled"
+        );
+
+    appointment
+        .HasIndex(item => new
+        {
+            item.DoctorId,
+            item.AppointmentDate,
+            item.Status
+        })
+        .HasDatabaseName(
+            "ix_appointments_doctor_date_status"
+        );
+
+    appointment
+        .HasOne(item => item.Doctor)
+        .WithMany(doctor => doctor.Appointments)
+        .HasForeignKey(item => item.DoctorId)
+        .OnDelete(DeleteBehavior.Restrict);
+
+    appointment
+        .HasOne(item => item.Patient)
+        .WithMany(patient => patient.Appointments)
+        .HasForeignKey(item => item.PatientId)
+        .OnDelete(DeleteBehavior.Restrict);
+
+    appointment
+        .HasOne(item => item.DoctorAvailability)
+        .WithMany(availability => availability.Appointments)
+        .HasForeignKey(item => item.DoctorAvailabilityId)
+        .OnDelete(DeleteBehavior.Restrict);
+}
 }

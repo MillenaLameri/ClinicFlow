@@ -15,6 +15,9 @@ public sealed class Patient
     public string Email { get; private set; } = string.Empty;
 
     public string? Phone { get; private set; }
+    
+    public ICollection<Appointment> Appointments { get; private set; }
+        = new List<Appointment>();
 
     public bool IsActive { get; private set; }
 

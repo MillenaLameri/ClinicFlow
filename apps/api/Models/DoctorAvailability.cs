@@ -7,6 +7,9 @@ public sealed class DoctorAvailability
     public Guid DoctorId { get; private set; }
 
     public Doctor Doctor { get; private set; } = null!;
+    
+    public ICollection<Appointment> Appointments { get; private set; }
+        = new List<Appointment>();
 
     public WeekDay DayOfWeek { get; private set; }
 

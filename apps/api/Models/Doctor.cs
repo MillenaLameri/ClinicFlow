@@ -20,6 +20,9 @@ public sealed class Doctor
     
     public ICollection<DoctorAvailability> Availabilities { get; private set; }
         = new List<DoctorAvailability>();
+    
+    public ICollection<Appointment> Appointments { get; private set; }
+        = new List<Appointment>();
 
     public bool IsActive { get; private set; }
 
