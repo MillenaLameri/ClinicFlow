@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using ClinicFlow.Api.Data;
 using Microsoft.EntityFrameworkCore;
+using ClinicFlow.Api.Services.Scheduling;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,6 +27,8 @@ builder.Services.AddDbContext<ClinicFlowDbContext>(options =>
 {
     options.UseNpgsql(connectionString);
 });
+
+builder.Services.AddScoped<AvailableSlotsService>();
 
 var app = builder.Build();
 
