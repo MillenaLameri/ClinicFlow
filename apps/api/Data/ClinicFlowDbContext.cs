@@ -11,19 +11,29 @@ public sealed class ClinicFlowDbContext : DbContext
     {
     }
 
-    public DbSet<Specialty> Specialties => Set<Specialty>();
+    public DbSet<Specialty> Specialties =>
+        Set<Specialty>();
 
-    public DbSet<Doctor> Doctors => Set<Doctor>();
+    public DbSet<Doctor> Doctors =>
+        Set<Doctor>();
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    public DbSet<DoctorAvailability> DoctorAvailabilities =>
+        Set<DoctorAvailability>();
+
+    protected override void OnModelCreating(
+        ModelBuilder modelBuilder
+    )
     {
         base.OnModelCreating(modelBuilder);
 
         ConfigureSpecialty(modelBuilder);
         ConfigureDoctor(modelBuilder);
+        ConfigureDoctorAvailability(modelBuilder);
     }
 
-    private static void ConfigureSpecialty(ModelBuilder modelBuilder)
+    private static void ConfigureSpecialty(
+        ModelBuilder modelBuilder
+    )
     {
         var specialty = modelBuilder.Entity<Specialty>();
 
@@ -56,7 +66,9 @@ public sealed class ClinicFlowDbContext : DbContext
             .IsRequired();
     }
 
-    private static void ConfigureDoctor(ModelBuilder modelBuilder)
+    private static void ConfigureDoctor(
+        ModelBuilder modelBuilder
+    )
     {
         var doctor = modelBuilder.Entity<Doctor>();
 
@@ -129,5 +141,95 @@ public sealed class ClinicFlowDbContext : DbContext
             .WithMany()
             .HasForeignKey(item => item.SpecialtyId)
             .OnDelete(DeleteBehavior.Restrict);
+    }
+
+    private static void ConfigureDoctorAvailability(
+        ModelBuilder modelBuilder
+    )
+    {
+        var availability =
+            modelBuilder.Entity<DoctorAvailability>();
+
+        availability.ToTable(
+            "doctor_availabilities",
+            tableBuilder =>
+            {
+                tableBuilder.HasCheckConstraint(
+                    "ck_doctor_availabilities_day_of_week",
+                    "day_of_week BETWEEN 1 AND 7"
+                );
+
+                tableBuilder.HasCheckConstraint(
+                    "ck_doctor_availabilities_time_range",
+                    "start_time < end_time"
+                );
+
+                tableBuilder.HasCheckConstraint(
+                    "ck_doctor_availabilities_slot_duration",
+                    "slot_duration_minutes BETWEEN 10 AND 240"
+                );
+            }
+        );
+
+        availability.HasKey(item => item.Id);
+
+        availability
+            .Property(item => item.Id)
+            .HasColumnName("id");
+
+        availability
+            .Property(item => item.DoctorId)
+            .HasColumnName("doctor_id")
+            .IsRequired();
+
+        availability
+            .Property(item => item.DayOfWeek)
+            .HasColumnName("day_of_week")
+            .HasConversion<int>()
+            .IsRequired();
+
+        availability
+            .Property(item => item.StartTime)
+            .HasColumnName("start_time")
+            .HasColumnType("time without time zone")
+            .IsRequired();
+
+        availability
+            .Property(item => item.EndTime)
+            .HasColumnName("end_time")
+            .HasColumnType("time without time zone")
+            .IsRequired();
+
+        availability
+            .Property(item => item.SlotDurationMinutes)
+            .HasColumnName("slot_duration_minutes")
+            .IsRequired();
+
+        availability
+            .Property(item => item.IsActive)
+            .HasColumnName("is_active")
+            .IsRequired();
+
+        availability
+            .Property(item => item.CreatedAtUtc)
+            .HasColumnName("created_at_utc")
+            .IsRequired();
+
+        availability
+            .HasIndex(item => new
+            {
+                item.DoctorId,
+                item.DayOfWeek,
+                item.StartTime,
+                item.EndTime
+            })
+            .IsUnique()
+            .HasFilter("is_active = TRUE");
+
+        availability
+            .HasOne(item => item.Doctor)
+            .WithMany(doctor => doctor.Availabilities)
+            .HasForeignKey(item => item.DoctorId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

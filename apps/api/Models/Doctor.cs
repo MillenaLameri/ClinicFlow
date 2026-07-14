@@ -17,6 +17,9 @@ public sealed class Doctor
     public Guid SpecialtyId { get; private set; }
 
     public Specialty Specialty { get; private set; } = null!;
+    
+    public ICollection<DoctorAvailability> Availabilities { get; private set; }
+        = new List<DoctorAvailability>();
 
     public bool IsActive { get; private set; }
 
