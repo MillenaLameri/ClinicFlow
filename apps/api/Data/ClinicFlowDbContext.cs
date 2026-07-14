@@ -19,6 +19,9 @@ public sealed class ClinicFlowDbContext : DbContext
 
     public DbSet<DoctorAvailability> DoctorAvailabilities =>
         Set<DoctorAvailability>();
+        
+    public DbSet<Patient> Patients =>
+        Set<Patient>();
 
     protected override void OnModelCreating(
         ModelBuilder modelBuilder
@@ -29,6 +32,7 @@ public sealed class ClinicFlowDbContext : DbContext
         ConfigureSpecialty(modelBuilder);
         ConfigureDoctor(modelBuilder);
         ConfigureDoctorAvailability(modelBuilder);
+        ConfigurePatient(modelBuilder);
     }
 
     private static void ConfigureSpecialty(
@@ -231,5 +235,66 @@ public sealed class ClinicFlowDbContext : DbContext
             .WithMany(doctor => doctor.Availabilities)
             .HasForeignKey(item => item.DoctorId)
             .OnDelete(DeleteBehavior.Cascade);
+    }
+    private static void ConfigurePatient(
+        ModelBuilder modelBuilder
+    )
+    {
+        var patient = modelBuilder.Entity<Patient>();
+
+        patient.ToTable("patients");
+
+        patient.HasKey(item => item.Id);
+
+        patient
+            .Property(item => item.Id)
+            .HasColumnName("id");
+
+        patient
+            .Property(item => item.FullName)
+            .HasColumnName("full_name")
+            .HasMaxLength(150)
+            .IsRequired();
+
+        patient
+            .Property(item => item.Cpf)
+            .HasColumnName("cpf")
+            .HasMaxLength(11)
+            .IsRequired();
+
+        patient
+            .HasIndex(item => item.Cpf)
+            .IsUnique();
+
+        patient
+            .Property(item => item.BirthDate)
+            .HasColumnName("birth_date")
+            .HasColumnType("date")
+            .IsRequired();
+
+        patient
+            .Property(item => item.Email)
+            .HasColumnName("email")
+            .HasMaxLength(150)
+            .IsRequired();
+
+        patient
+            .HasIndex(item => item.Email)
+            .IsUnique();
+
+        patient
+            .Property(item => item.Phone)
+            .HasColumnName("phone")
+            .HasMaxLength(11);
+
+        patient
+            .Property(item => item.IsActive)
+            .HasColumnName("is_active")
+            .IsRequired();
+
+        patient
+            .Property(item => item.CreatedAtUtc)
+            .HasColumnName("created_at_utc")
+            .IsRequired();
     }
 }
