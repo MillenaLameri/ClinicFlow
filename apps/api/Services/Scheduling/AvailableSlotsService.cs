@@ -32,7 +32,9 @@ public sealed class AvailableSlotsService
         CancellationToken cancellationToken
     )
     {
-        var weekDay = ConvertToWeekDay(date.DayOfWeek);
+        var weekDay = ConvertToWeekDay(
+            date.DayOfWeek
+        );
 
         var availabilities =
             await _dbContext.DoctorAvailabilities
@@ -47,34 +49,65 @@ public sealed class AvailableSlotsService
                 )
                 .ToListAsync(cancellationToken);
 
+        var scheduledAppointments =
+            await _dbContext.Appointments
+                .AsNoTracking()
+                .Where(appointment =>
+                    appointment.DoctorId == doctorId
+                    && appointment.AppointmentDate == date
+                    && appointment.Status ==
+                        AppointmentStatus.Scheduled
+                )
+                .Select(appointment => new
+                {
+                    appointment.StartTime,
+                    appointment.EndTime
+                })
+                .ToListAsync(cancellationToken);
+
         var generatedSlots =
             new List<GeneratedAvailableSlot>();
 
         foreach (var availability in availabilities)
         {
-            var currentStart = availability.StartTime;
+            var currentStart =
+                availability.StartTime;
 
             while (true)
             {
-                var currentEnd = currentStart.AddMinutes(
-                    availability.SlotDurationMinutes
-                );
+                var currentEnd =
+                    currentStart.AddMinutes(
+                        availability.SlotDurationMinutes
+                    );
 
                 if (currentEnd > availability.EndTime)
                 {
                     break;
                 }
 
-                generatedSlots.Add(
-                    new GeneratedAvailableSlot(
-                        availability.Id,
-                        date,
-                        weekDay,
-                        currentStart,
-                        currentEnd,
-                        availability.SlotDurationMinutes
-                    )
-                );
+                var isOccupied =
+                    scheduledAppointments.Any(
+                        appointment =>
+                            appointment.StartTime
+                                < currentEnd
+                            && currentStart
+                                < appointment.EndTime
+                    );
+
+                if (!isOccupied)
+                {
+                    generatedSlots.Add(
+                        new GeneratedAvailableSlot(
+                            availability.Id,
+                            date,
+                            weekDay,
+                            currentStart,
+                            currentEnd,
+                            availability
+                                .SlotDurationMinutes
+                        )
+                    );
+                }
 
                 currentStart = currentEnd;
             }
