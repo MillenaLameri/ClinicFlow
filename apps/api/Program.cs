@@ -483,10 +483,6 @@ builder.Services
         }
     );
 
-// ==============================
-// A PARTIR DAQUI NÃO ADICIONAR
-// MAIS builder.Services
-// ==============================
 
 var app =
     builder.Build();
