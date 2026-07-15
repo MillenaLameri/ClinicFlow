@@ -6,6 +6,8 @@ import { LoginPage } from "@/pages/auth/LoginPage";
 import { AdminDashboardPage } from "@/pages/dashboard/admin/AdminDashboardPage";
 import { DoctorDashboardPage } from "@/pages/dashboard/doctor/DoctorDashboardPage";
 import { PatientDashboardPage } from "@/pages/dashboard/patient/PatientDashboardPage";
+import { DoctorsPage } from "@/pages/admin/doctors/DoctorsPage";
+
 
 export function AppRoutes() {
   return (
@@ -44,6 +46,15 @@ export function AppRoutes() {
         element={
           <RoleProtectedRoute allowedRoles={["Patient"]}>
             <PatientDashboardPage />
+          </RoleProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/doctors"
+        element={
+          <RoleProtectedRoute allowedRoles={["Admin"]}>
+            <DoctorsPage />
           </RoleProtectedRoute>
         }
       />

@@ -1,18 +1,6 @@
-import {
-  createContext,
-  useCallback,
-  useMemo,
-  useState,
-} from 'react';
-
-import type {
-  ReactNode,
-} from 'react';
-
-import {
-  authStorage,
-} from '../services/authStorage';
-
+import { createContext, useCallback, useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import { authStorage } from "../services/authStorage";
 import type {
   AuthenticatedUser,
   AuthenticationResponse,
