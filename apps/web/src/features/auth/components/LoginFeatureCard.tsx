@@ -49,23 +49,38 @@ export function LoginFeatureCard({
   return (
     <article
       className={[
-        "rounded-2xl border p-4",
+        "min-w-0 rounded-2xl border p-3 xl:p-4",
         styles.container,
-        elevated ? "translate-y-6" : "",
+        elevated ? "translate-y-4 xl:translate-y-6" : "",
       ].join(" ")}
     >
       <div
         className={[
-          "mb-7 flex size-10 items-center justify-center rounded-xl",
+          "mb-5 flex size-9 items-center justify-center rounded-xl xl:mb-7 xl:size-10",
           styles.icon,
         ].join(" ")}
       >
-        <Icon size={20} />
+        <Icon size={18} />
       </div>
 
-      <p className="text-sm font-semibold">{title}</p>
+      <p
+        className="
+          truncate
+          text-xs
+          font-semibold
 
-      <p className={["mt-1 text-xs", styles.description].join(" ")}>
+          xl:text-sm
+        "
+      >
+        {title}
+      </p>
+
+      <p
+        className={[
+          "mt-1 line-clamp-2 text-[10px] leading-4 xl:text-xs",
+          styles.description,
+        ].join(" ")}
+      >
         {description}
       </p>
     </article>

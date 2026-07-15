@@ -5,9 +5,12 @@ export function LoginPage() {
   return (
     <main
       className="
-        min-h-screen
+        h-dvh
+        w-full
+        overflow-hidden
         bg-[#F5F8FC]
-        p-4
+
+        sm:p-4
         md:p-6
         lg:p-8
       "
@@ -16,17 +19,21 @@ export function LoginPage() {
         className="
           mx-auto
           grid
-          min-h-[calc(100vh-2rem)]
+          h-full
+          w-full
           max-w-[1440px]
           overflow-hidden
-          rounded-[32px]
           bg-white
-          shadow-[0_24px_80px_rgba(31,53,100,0.08)]
-          md:min-h-[calc(100vh-3rem)]
+
+          sm:rounded-[28px]
+          sm:shadow-[0_24px_80px_rgba(31,53,100,0.08)]
+
           lg:grid-cols-[0.9fr_1.1fr]
+          lg:rounded-[32px]
         "
       >
         <LoginForm />
+
         <LoginHero />
       </div>
     </main>

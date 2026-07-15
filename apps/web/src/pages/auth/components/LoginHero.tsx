@@ -5,7 +5,7 @@ import {
   Stethoscope,
 } from "lucide-react";
 
-import { LoginFeatureCard } from "../../../components/LoginFeatureCard";
+import { LoginFeatureCard } from "../../../features/auth/components/LoginFeatureCard";
 
 const features = [
   {
@@ -35,16 +35,20 @@ export function LoginHero() {
   return (
     <section
       className="
-        relative
-        hidden
-        overflow-hidden
-        bg-[#172D6B]
-        lg:flex
-        lg:flex-col
-        lg:justify-between
-        lg:p-12
-        xl:p-16
-      "
+    relative
+    hidden
+    h-full
+    min-h-0
+    overflow-hidden
+    bg-[#172D6B]
+
+    lg:flex
+    lg:flex-col
+    lg:justify-between
+    lg:p-10
+
+    xl:p-14
+  "
     >
       <div
         className="

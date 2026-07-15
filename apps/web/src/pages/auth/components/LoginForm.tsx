@@ -1,39 +1,128 @@
-import { ArrowRight, Eye, EyeOff } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, LoaderCircle } from "lucide-react";
 
 import { useState } from "react";
+import { useNavigate } from "react-router";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import axios from "axios";
 
-import { ClinicFlowLogo } from "@/components/ClinicFlowLogo";
-
+import { ClinicFlowLogo } from "@/features/auth/components/ClinicFlowLogo";
 import { Button } from "@/components/ui/button";
-
 import { Input } from "@/components/ui/input";
-
 import { Label } from "@/components/ui/label";
+
+import { useLogin } from "@/features/auth/hooks/useLogin";
+
+import {
+  loginSchema,
+  type LoginFormData,
+} from "@/features/auth/schemas/loginSchema";
 
 export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-  }
+  const navigate = useNavigate();
+
+  const loginMutation = useLogin();
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginFormData>({
+    resolver: zodResolver(loginSchema),
+
+    defaultValues: {
+      email: "",
+      password: "",
+    },
+  });
 
   function handleTogglePassword() {
     setShowPassword((current) => !current);
   }
 
+  async function onSubmit(data: LoginFormData) {
+    try {
+      await loginMutation.mutateAsync(data);
+
+      navigate("/dashboard", {
+        replace: true,
+      });
+    } catch {
+      // O erro é exibido através
+      // do estado da mutation.
+    }
+  }
+
+  function getLoginError(): string | null {
+    if (!loginMutation.error) {
+      return null;
+    }
+
+    if (axios.isAxiosError(loginMutation.error)) {
+      if (loginMutation.error.response?.status === 401) {
+        return "E-mail ou senha inválidos.";
+      }
+
+      if (loginMutation.error.response?.status === 403) {
+        return "Sua conta não possui permissão para acessar o sistema.";
+      }
+
+      const detail = loginMutation.error.response?.data?.detail;
+
+      if (detail) {
+        return String(detail);
+      }
+    }
+
+    return "Não foi possível entrar. Tente novamente.";
+  }
+
+  const loginError = getLoginError();
+
   return (
     <section
       className="
         flex
+        h-full
+        min-h-0
+        w-full
         flex-col
-        px-6
-        py-8
-        sm:px-10
-        lg:px-16
-        xl:px-24
+        overflow-y-auto
+
+        px-5
+        pb-5
+        pt-8
+
+        sm:px-8
+        sm:pb-6
+        sm:pt-8
+
+        md:px-10
+
+        lg:px-12
+        lg:pb-8
+        lg:pt-8
+
+        xl:px-20
       "
     >
-      <ClinicFlowLogo />
+      <header
+        className="
+          relative
+          z-10
+          mx-auto
+          flex
+          w-full
+          max-w-[430px]
+          shrink-0
+          items-center
+          pb-5
+        "
+      >
+        <ClinicFlowLogo />
+      </header>
 
       <div
         className="
@@ -44,13 +133,24 @@ export function LoginForm() {
           flex-1
           flex-col
           justify-center
-          py-12
+
+          py-3
+
+          sm:py-4
+
+          lg:py-5
         "
       >
-        <header className="mb-9">
+        <header
+          className="
+            mb-7
+
+            sm:mb-9
+          "
+        >
           <span
             className="
-              mb-4
+              mb-3
               inline-flex
               rounded-full
               bg-[#EDF3FF]
@@ -59,6 +159,8 @@ export function LoginForm() {
               text-xs
               font-semibold
               text-[#2448A5]
+
+              sm:mb-4
             "
           >
             Bem-vinda de volta
@@ -66,11 +168,14 @@ export function LoginForm() {
 
           <h1
             className="
-              text-3xl
+              text-2xl
               font-bold
               tracking-tight
               text-[#18234A]
-              sm:text-4xl
+
+              sm:text-3xl
+
+              lg:text-4xl
             "
           >
             Entre na sua conta
@@ -90,7 +195,11 @@ export function LoginForm() {
           </p>
         </header>
 
-        <form className="space-y-5" onSubmit={handleSubmit}>
+        <form
+          className="space-y-5"
+          onSubmit={handleSubmit(onSubmit)}
+          noValidate
+        >
           <div className="space-y-2">
             <Label
               htmlFor="email"
@@ -105,23 +214,43 @@ export function LoginForm() {
 
             <Input
               id="email"
-              name="email"
               type="email"
+              inputMode="email"
               autoComplete="email"
+              autoCapitalize="none"
               placeholder="seuemail@exemplo.com"
+              aria-invalid={Boolean(errors.email)}
+              {...register("email")}
               className="
                 h-12
                 rounded-xl
                 border-slate-200
                 bg-[#F9FAFC]
                 px-4
+                text-base
                 shadow-none
                 transition
                 placeholder:text-slate-400
+
                 focus-visible:border-[#2448A5]
                 focus-visible:ring-[#2448A5]/15
+
+                sm:text-sm
               "
             />
+
+            {errors.email && (
+              <p
+                role="alert"
+                className="
+                  text-xs
+                  font-medium
+                  text-red-500
+                "
+              >
+                {errors.email.message}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -130,6 +259,7 @@ export function LoginForm() {
                 flex
                 items-center
                 justify-between
+                gap-4
               "
             >
               <Label
@@ -146,10 +276,12 @@ export function LoginForm() {
               <button
                 type="button"
                 className="
+                  shrink-0
                   text-xs
                   font-medium
                   text-[#2448A5]
                   transition
+
                   hover:text-[#172D6B]
                 "
               >
@@ -160,10 +292,11 @@ export function LoginForm() {
             <div className="relative">
               <Input
                 id="password"
-                name="password"
                 type={showPassword ? "text" : "password"}
                 autoComplete="current-password"
                 placeholder="Digite sua senha"
+                aria-invalid={Boolean(errors.password)}
+                {...register("password")}
                 className="
                   h-12
                   rounded-xl
@@ -171,11 +304,15 @@ export function LoginForm() {
                   bg-[#F9FAFC]
                   px-4
                   pr-12
+                  text-base
                   shadow-none
                   transition
                   placeholder:text-slate-400
+
                   focus-visible:border-[#2448A5]
                   focus-visible:ring-[#2448A5]/15
+
+                  sm:text-sm
                 "
               />
 
@@ -184,11 +321,18 @@ export function LoginForm() {
                 onClick={handleTogglePassword}
                 className="
                   absolute
-                  right-4
+                  right-3
                   top-1/2
+                  flex
+                  size-9
                   -translate-y-1/2
+                  items-center
+                  justify-center
+                  rounded-md
                   text-slate-400
                   transition
+
+                  hover:bg-slate-100
                   hover:text-[#2448A5]
                 "
                 aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
@@ -196,10 +340,44 @@ export function LoginForm() {
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
+
+            {errors.password && (
+              <p
+                role="alert"
+                className="
+                  text-xs
+                  font-medium
+                  text-red-500
+                "
+              >
+                {errors.password.message}
+              </p>
+            )}
           </div>
+
+          {loginError && (
+            <div
+              role="alert"
+              aria-live="polite"
+              className="
+                rounded-xl
+                border
+                border-red-100
+                bg-red-50
+                px-4
+                py-3
+                text-sm
+                leading-5
+                text-red-600
+              "
+            >
+              {loginError}
+            </div>
+          )}
 
           <Button
             type="submit"
+            disabled={loginMutation.isPending}
             className="
               group
               mt-2
@@ -211,27 +389,49 @@ export function LoginForm() {
               text-white
               shadow-none
               transition-all
+
               hover:bg-[#172D6B]
+
+              disabled:cursor-not-allowed
+              disabled:opacity-70
             "
           >
-            Entrar
-            <ArrowRight
-              size={17}
-              className="
-                ml-1
-                transition-transform
-                group-hover:translate-x-1
-              "
-            />
+            {loginMutation.isPending ? (
+              <>
+                <LoaderCircle
+                  size={17}
+                  className="
+                    animate-spin
+                  "
+                />
+                Entrando...
+              </>
+            ) : (
+              <>
+                Entrar
+                <ArrowRight
+                  size={17}
+                  className="
+                    ml-1
+                    transition-transform
+
+                    group-hover:translate-x-1
+                  "
+                />
+              </>
+            )}
           </Button>
         </form>
 
         <div
           className="
-            mt-8
+            mt-7
             flex
             items-center
-            gap-4
+            gap-3
+
+            sm:mt-8
+            sm:gap-4
           "
         >
           <div
@@ -244,6 +444,7 @@ export function LoginForm() {
 
           <span
             className="
+              shrink-0
               text-xs
               text-slate-400
             "
@@ -262,10 +463,13 @@ export function LoginForm() {
 
         <p
           className="
-            mt-6
+            mt-5
             text-center
             text-sm
+            leading-6
             text-slate-500
+
+            sm:mt-6
           "
         >
           Ainda não possui uma conta?{" "}
@@ -275,6 +479,7 @@ export function LoginForm() {
               font-semibold
               text-[#2448A5]
               transition
+
               hover:text-[#172D6B]
             "
           >
@@ -285,9 +490,19 @@ export function LoginForm() {
 
       <footer
         className="
+          mx-auto
+          w-full
+          max-w-[430px]
+          shrink-0
+          pb-1
+          pt-3
           text-center
-          text-xs
+          text-[11px]
+          leading-5
           text-slate-400
+
+          sm:text-xs
+
           lg:text-left
         "
       >
