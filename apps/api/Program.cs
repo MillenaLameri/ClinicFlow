@@ -297,6 +297,30 @@ builder.Services.AddAuthorization(
         );
 
         options.AddPolicy(
+            AuthorizationPolicies.DoctorOnly,
+            policy =>
+            {
+                policy.RequireAuthenticatedUser();
+
+                policy.RequireRole(
+                    UserRoleNames.Doctor
+                );
+            }
+        );
+
+        options.AddPolicy(
+            AuthorizationPolicies.PatientOnly,
+            policy =>
+            {
+                policy.RequireAuthenticatedUser();
+
+                policy.RequireRole(
+                    UserRoleNames.Patient
+                );
+            }
+        );
+
+        options.AddPolicy(
             AuthorizationPolicies.AdminOrDoctor,
             policy =>
             {
