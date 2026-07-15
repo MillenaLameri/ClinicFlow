@@ -12,6 +12,8 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using ClinicFlow.Api.Authorization;
+using ClinicFlow.Api.Services.Authorization;
 
 var builder =
     WebApplication.CreateBuilder(args);
@@ -259,11 +261,58 @@ builder.Services
                     ClaimTypes.Role
             };
     });
+builder.Services.AddAuthorization(
+    options =>
+    {
+        options.AddPolicy(
+            AuthorizationPolicies.ClinicUser,
+            policy =>
+            {
+                policy.RequireAuthenticatedUser();
 
-builder.Services.AddAuthorization();
+                policy.RequireRole(
+                    UserRoleNames.Admin,
+                    UserRoleNames.Doctor,
+                    UserRoleNames.Patient
+                );
+            }
+        );
+
+        options.AddPolicy(
+            AuthorizationPolicies.AdminOnly,
+            policy =>
+            {
+                policy.RequireAuthenticatedUser();
+
+                policy.RequireRole(
+                    UserRoleNames.Admin
+                );
+            }
+        );
+
+        options.AddPolicy(
+            AuthorizationPolicies.AdminOrDoctor,
+            policy =>
+            {
+                policy.RequireAuthenticatedUser();
+
+                policy.RequireRole(
+                    UserRoleNames.Admin,
+                    UserRoleNames.Doctor
+                );
+            }
+        );
+    }
+);
 
 builder.Services.AddScoped<
     AvailableSlotsService
+>();
+
+builder.Services.AddHttpContextAccessor();
+
+builder.Services.AddScoped<
+    CurrentUserService
 >();
 
 builder.Services.AddScoped<
