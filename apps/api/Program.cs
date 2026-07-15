@@ -1,3 +1,4 @@
+using ClinicFlow.Api.Infrastructure.Exceptions;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -353,7 +354,53 @@ builder.Services.AddScoped<
     AuthenticationService
 >();
 
+builder.Services.AddProblemDetails();
+
+builder.Services
+    .AddExceptionHandler<
+        GlobalExceptionHandler
+    >();
+
 var app = builder.Build();
+
+app.UseExceptionHandler();
+
+var corsSettings =
+    builder.Configuration
+        .GetSection(
+            CorsSettings.SectionName
+        )
+        .Get<CorsSettings>()
+    ?? new CorsSettings();
+
+if (
+    corsSettings.AllowedOrigins
+        .Length == 0
+)
+{
+    throw new InvalidOperationException(
+        "Nenhuma origem CORS foi configurada."
+    );
+}
+
+builder.Services.AddCors(
+    options =>
+    {
+        options.AddPolicy(
+            CorsPolicyNames.Web,
+            policy =>
+            {
+                policy
+                    .WithOrigins(
+                        corsSettings
+                            .AllowedOrigins
+                    )
+                    .AllowAnyHeader()
+                    .AllowAnyMethod();
+            }
+        );
+    }
+);
 
 await AdminSeeder.SeedAsync(
     app.Services
@@ -372,7 +419,12 @@ if (app.Environment.IsDevelopment())
     });
 }
 
+app.UseCors(
+    CorsPolicyNames.Web
+);
+
 app.UseAuthentication();
+
 app.UseAuthorization();
 
 app.MapControllers();
