@@ -1,3 +1,4 @@
+using ClinicFlow.Api.Contracts.Common;
 using ClinicFlow.Api.Authorization;
 using ClinicFlow.Api.Contracts.Appointments;
 using ClinicFlow.Api.Data;
@@ -33,24 +34,46 @@ public sealed class AppointmentsController
         _currentUser = currentUser;
     }
 
-    [HttpGet]
-    public async Task<
-        ActionResult<
-            IReadOnlyCollection<
-                AppointmentResponse
-            >
+[HttpGet]
+[ProducesResponseType(
+    typeof(
+        PagedResponse<
+            AppointmentResponse
         >
-    > GetAll(
-        [FromQuery] Guid? doctorId = null,
-        [FromQuery] Guid? patientId = null,
-        [FromQuery] DateOnly? date = null,
-        [FromQuery]
-        AppointmentStatus? status = null,
-        CancellationToken cancellationToken =
-            default
-    )
-    {
-        var query = _dbContext.Appointments
+    ),
+    StatusCodes.Status200OK
+)]
+public async Task<
+    ActionResult<
+        PagedResponse<
+            AppointmentResponse
+        >
+    >
+> GetAll(
+    [FromQuery]
+    Guid? doctorId = null,
+
+    [FromQuery]
+    Guid? patientId = null,
+
+    [FromQuery]
+    DateOnly? date = null,
+
+    [FromQuery]
+    AppointmentStatus? status = null,
+
+    [FromQuery]
+    PaginationQuery? pagination = null,
+
+    CancellationToken cancellationToken =
+        default
+)
+{
+    pagination ??=
+        new PaginationQuery();
+
+    var query =
+        _dbContext.Appointments
             .AsNoTracking()
             .Include(
                 appointment =>
@@ -66,132 +89,156 @@ public sealed class AppointmentsController
             )
             .AsQueryable();
 
-        if (_currentUser.IsAdmin)
+    if (_currentUser.IsAdmin)
+    {
+        if (doctorId.HasValue)
         {
-            if (doctorId.HasValue)
-            {
-                query = query.Where(
-                    appointment =>
-                        appointment.DoctorId
-                        == doctorId.Value
-                );
-            }
-
-            if (patientId.HasValue)
-            {
-                query = query.Where(
-                    appointment =>
-                        appointment.PatientId
-                        == patientId.Value
-                );
-            }
-        }
-        else if (
-            _currentUser.IsDoctor
-            && _currentUser.DoctorId
-                is Guid currentDoctorId
-        )
-        {
-            if (
-                doctorId.HasValue
-                && doctorId.Value
-                    != currentDoctorId
-            )
-            {
-                return Forbid();
-            }
-
             query = query.Where(
                 appointment =>
                     appointment.DoctorId
-                    == currentDoctorId
+                    == doctorId.Value
             );
-
-            if (patientId.HasValue)
-            {
-                query = query.Where(
-                    appointment =>
-                        appointment.PatientId
-                        == patientId.Value
-                );
-            }
         }
-        else if (
-            _currentUser.IsPatient
-            && _currentUser.PatientId
-                is Guid currentPatientId
-        )
-        {
-            if (
-                patientId.HasValue
-                && patientId.Value
-                    != currentPatientId
-            )
-            {
-                return Forbid();
-            }
 
+        if (patientId.HasValue)
+        {
             query = query.Where(
                 appointment =>
                     appointment.PatientId
-                    == currentPatientId
+                    == patientId.Value
             );
-
-            if (doctorId.HasValue)
-            {
-                query = query.Where(
-                    appointment =>
-                        appointment.DoctorId
-                        == doctorId.Value
-                );
-            }
         }
-        else
+    }
+    else if (
+        _currentUser.IsDoctor
+        && _currentUser.DoctorId
+            is Guid currentDoctorId
+    )
+    {
+        if (
+            doctorId.HasValue
+            && doctorId.Value
+                != currentDoctorId
+        )
         {
             return Forbid();
         }
 
-        if (date.HasValue)
+        query = query.Where(
+            appointment =>
+                appointment.DoctorId
+                == currentDoctorId
+        );
+
+        if (patientId.HasValue)
         {
             query = query.Where(
                 appointment =>
-                    appointment.AppointmentDate
-                    == date.Value
+                    appointment.PatientId
+                    == patientId.Value
             );
         }
+    }
+    else if (
+        _currentUser.IsPatient
+        && _currentUser.PatientId
+            is Guid currentPatientId
+    )
+    {
+        if (
+            patientId.HasValue
+            && patientId.Value
+                != currentPatientId
+        )
+        {
+            return Forbid();
+        }
 
-        if (status.HasValue)
+        query = query.Where(
+            appointment =>
+                appointment.PatientId
+                == currentPatientId
+        );
+
+        if (doctorId.HasValue)
         {
             query = query.Where(
                 appointment =>
-                    appointment.Status
-                    == status.Value
+                    appointment.DoctorId
+                    == doctorId.Value
             );
         }
-
-        var appointments =
-            await query
-                .OrderBy(
-                    appointment =>
-                        appointment.AppointmentDate
-                )
-                .ThenBy(
-                    appointment =>
-                        appointment.StartTime
-                )
-                .ToListAsync(
-                    cancellationToken
-                );
-
-        var response = appointments
-            .Select(
-                AppointmentResponse.FromEntity
-            )
-            .ToList();
-
-        return Ok(response);
+    }
+    else
+    {
+        return Forbid();
     }
 
+    if (date.HasValue)
+    {
+        query = query.Where(
+            appointment =>
+                appointment
+                    .AppointmentDate
+                    == date.Value
+        );
+    }
+
+    if (status.HasValue)
+    {
+        query = query.Where(
+            appointment =>
+                appointment.Status
+                == status.Value
+        );
+    }
+
+    var totalItems =
+        await query.CountAsync(
+            cancellationToken
+        );
+
+    var appointments =
+        await query
+            .OrderBy(
+                appointment =>
+                    appointment
+                        .AppointmentDate
+            )
+            .ThenBy(
+                appointment =>
+                    appointment.StartTime
+            )
+            .Skip(
+                (
+                    pagination.Page - 1
+                )
+                * pagination.PageSize
+            )
+            .Take(
+                pagination.PageSize
+            )
+            .ToListAsync(
+                cancellationToken
+            );
+
+    var items = appointments
+        .Select(
+            AppointmentResponse.FromEntity
+        )
+        .ToList();
+
+    return Ok(
+        PagedResponse<
+            AppointmentResponse
+        >.Create(
+            items,
+            pagination.Page,
+            pagination.PageSize,
+            totalItems
+        )
+    );
+}
     [HttpGet("{id:guid}")]
     public async Task<
         ActionResult<AppointmentResponse>

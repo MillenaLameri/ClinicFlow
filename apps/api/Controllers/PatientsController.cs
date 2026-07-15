@@ -1,6 +1,10 @@
+using ClinicFlow.Api.Authorization;
+using ClinicFlow.Api.Contracts.Common;
 using ClinicFlow.Api.Contracts.Patients;
 using ClinicFlow.Api.Data;
 using ClinicFlow.Api.Models;
+using ClinicFlow.Api.Services.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -9,97 +13,257 @@ namespace ClinicFlow.Api.Controllers;
 
 [ApiController]
 [Route("api/patients")]
-public sealed class PatientsController : ControllerBase
+[Authorize(
+    Policy = AuthorizationPolicies.ClinicUser
+)]
+public sealed class PatientsController
+    : ControllerBase
 {
-    private readonly ClinicFlowDbContext _dbContext;
+    private readonly ClinicFlowDbContext
+        _dbContext;
+
+    private readonly CurrentUserService
+        _currentUser;
 
     public PatientsController(
-        ClinicFlowDbContext dbContext
+        ClinicFlowDbContext dbContext,
+        CurrentUserService currentUser
     )
     {
         _dbContext = dbContext;
+        _currentUser = currentUser;
     }
 
     [HttpGet]
+    [ProducesResponseType(
+        typeof(
+            PagedResponse<
+                PatientResponse
+            >
+        ),
+        StatusCodes.Status200OK
+    )]
     public async Task<
-        ActionResult<IReadOnlyCollection<PatientResponse>>
+        ActionResult<
+            PagedResponse<
+                PatientResponse
+            >
+        >
     > GetAll(
-        [FromQuery] string? search = null,
-        [FromQuery] bool includeInactive = false,
-        CancellationToken cancellationToken = default
+        [FromQuery]
+        string? search = null,
+
+        [FromQuery]
+        bool includeInactive = false,
+
+        [FromQuery]
+        PaginationQuery? pagination = null,
+
+        CancellationToken cancellationToken =
+            default
     )
     {
-        var query = _dbContext.Patients
-            .AsNoTracking()
-            .AsQueryable();
+        pagination ??=
+            new PaginationQuery();
 
-        if (!includeInactive)
+        var query =
+            _dbContext.Patients
+                .AsNoTracking()
+                .AsQueryable();
+
+        if (_currentUser.IsAdmin)
+        {
+            if (!includeInactive)
+            {
+                query = query.Where(
+                    patient =>
+                        patient.IsActive
+                );
+            }
+        }
+        else if (
+            _currentUser.IsPatient
+            && _currentUser.PatientId
+                is Guid currentPatientId
+        )
         {
             query = query.Where(
-                patient => patient.IsActive
+                patient =>
+                    patient.Id
+                        == currentPatientId
+                    && patient.IsActive
             );
         }
+        else
+        {
+            return Forbid();
+        }
 
-        if (!string.IsNullOrWhiteSpace(search))
+        if (
+            !string.IsNullOrWhiteSpace(
+                search
+            )
+        )
         {
             var normalizedSearch =
-                search.Trim().ToLowerInvariant();
+                search
+                    .Trim()
+                    .ToLowerInvariant();
 
-            var numericSearch = new string(
-                search.Where(char.IsDigit).ToArray()
-            );
+            var numericSearch =
+                new string(
+                    search
+                        .Where(
+                            char.IsDigit
+                        )
+                        .ToArray()
+                );
 
-            query = query.Where(patient =>
-                patient.FullName
-                    .ToLower()
-                    .Contains(normalizedSearch)
-                || patient.Email
-                    .ToLower()
-                    .Contains(normalizedSearch)
-                || (
-                    numericSearch != string.Empty
-                    && patient.Cpf.Contains(numericSearch)
-                )
+            query = query.Where(
+                patient =>
+                    patient.FullName
+                        .ToLower()
+                        .Contains(
+                            normalizedSearch
+                        )
+                    || patient.Email
+                        .ToLower()
+                        .Contains(
+                            normalizedSearch
+                        )
+                    || (
+                        numericSearch
+                            != string.Empty
+                        && patient.Cpf
+                            .Contains(
+                                numericSearch
+                            )
+                    )
             );
         }
 
-        var patients = await query
-            .OrderBy(patient => patient.FullName)
-            .ToListAsync(cancellationToken);
+        var totalItems =
+            await query.CountAsync(
+                cancellationToken
+            );
 
-        var response = patients
-            .Select(PatientResponse.FromEntity)
-            .ToList();
+        var patients =
+            await query
+                .OrderBy(
+                    patient =>
+                        patient.FullName
+                )
+                .Skip(
+                    (
+                        pagination.Page - 1
+                    )
+                    * pagination.PageSize
+                )
+                .Take(
+                    pagination.PageSize
+                )
+                .ToListAsync(
+                    cancellationToken
+                );
 
-        return Ok(response);
+        var items =
+            patients
+                .Select(
+                    PatientResponse.FromEntity
+                )
+                .ToList();
+
+        return Ok(
+            PagedResponse<
+                PatientResponse
+            >.Create(
+                items,
+                pagination.Page,
+                pagination.PageSize,
+                totalItems
+            )
+        );
     }
 
     [HttpGet("{id:guid}")]
-    public async Task<ActionResult<PatientResponse>> GetById(
+    [ProducesResponseType(
+        typeof(PatientResponse),
+        StatusCodes.Status200OK
+    )]
+    [ProducesResponseType(
+        StatusCodes.Status403Forbidden
+    )]
+    [ProducesResponseType(
+        StatusCodes.Status404NotFound
+    )]
+    public async Task<
+        ActionResult<PatientResponse>
+    > GetById(
         Guid id,
         CancellationToken cancellationToken
     )
     {
-        var patient = await _dbContext.Patients
-            .AsNoTracking()
-            .SingleOrDefaultAsync(
-                item => item.Id == id,
-                cancellationToken
-            );
+        if (
+            !_currentUser.IsAdmin
+            && !(
+                _currentUser.IsPatient
+                && _currentUser.PatientId
+                    == id
+            )
+        )
+        {
+            return Forbid();
+        }
+
+        var patient =
+            await _dbContext.Patients
+                .AsNoTracking()
+                .SingleOrDefaultAsync(
+                    item =>
+                        item.Id == id,
+                    cancellationToken
+                );
 
         if (patient is null)
         {
             return PatientNotFound(id);
         }
 
+        if (
+            _currentUser.IsPatient
+            && !patient.IsActive
+        )
+        {
+            return PatientNotFound(id);
+        }
+
         return Ok(
-            PatientResponse.FromEntity(patient)
+            PatientResponse.FromEntity(
+                patient
+            )
         );
     }
 
     [HttpPost]
-    public async Task<ActionResult<PatientResponse>> Create(
-        [FromBody] CreatePatientRequest request,
+    [Authorize(
+        Policy =
+            AuthorizationPolicies.AdminOnly
+    )]
+    [ProducesResponseType(
+        typeof(PatientResponse),
+        StatusCodes.Status201Created
+    )]
+    [ProducesResponseType(
+        StatusCodes.Status400BadRequest
+    )]
+    [ProducesResponseType(
+        StatusCodes.Status409Conflict
+    )]
+    public async Task<
+        ActionResult<PatientResponse>
+    > Create(
+        [FromBody]
+        CreatePatientRequest request,
         CancellationToken cancellationToken
     )
     {
@@ -117,32 +281,46 @@ public sealed class PatientsController : ControllerBase
         }
         catch (ArgumentException exception)
         {
-            return InvalidPatientData(exception.Message);
+            return InvalidPatientData(
+                exception.Message
+            );
         }
 
         var cpfAlreadyExists =
-            await _dbContext.Patients.AnyAsync(
-                item => item.Cpf == patient.Cpf,
-                cancellationToken
-            );
+            await _dbContext.Patients
+                .AnyAsync(
+                    item =>
+                        item.Cpf
+                        == patient.Cpf,
+                    cancellationToken
+                );
 
         if (cpfAlreadyExists)
         {
-            return PatientCpfConflict(patient.Cpf);
+            return PatientCpfConflict(
+                patient.Cpf
+            );
         }
 
         var emailAlreadyExists =
-            await _dbContext.Patients.AnyAsync(
-                item => item.Email == patient.Email,
-                cancellationToken
-            );
+            await _dbContext.Patients
+                .AnyAsync(
+                    item =>
+                        item.Email
+                        == patient.Email,
+                    cancellationToken
+                );
 
         if (emailAlreadyExists)
         {
-            return PatientEmailConflict(patient.Email);
+            return PatientEmailConflict(
+                patient.Email
+            );
         }
 
-        _dbContext.Patients.Add(patient);
+        _dbContext.Patients.Add(
+            patient
+        );
 
         try
         {
@@ -151,38 +329,72 @@ public sealed class PatientsController : ControllerBase
             );
         }
         catch (DbUpdateException exception)
-            when (IsUniqueConstraintViolation(exception))
+            when (
+                IsUniqueConstraintViolation(
+                    exception
+                )
+            )
         {
             return Problem(
-                statusCode: StatusCodes.Status409Conflict,
-                title: "Paciente já cadastrado.",
+                statusCode:
+                    StatusCodes
+                        .Status409Conflict,
+                title:
+                    "Paciente já cadastrado.",
                 detail:
                     "Já existe um paciente utilizando o CPF ou e-mail informado."
             );
         }
 
         var response =
-            PatientResponse.FromEntity(patient);
+            PatientResponse.FromEntity(
+                patient
+            );
 
         return CreatedAtAction(
             nameof(GetById),
-            new { id = patient.Id },
+            new
+            {
+                id = patient.Id
+            },
             response
         );
     }
 
     [HttpPut("{id:guid}")]
-    public async Task<ActionResult<PatientResponse>> Update(
+    [Authorize(
+        Policy =
+            AuthorizationPolicies.AdminOnly
+    )]
+    [ProducesResponseType(
+        typeof(PatientResponse),
+        StatusCodes.Status200OK
+    )]
+    [ProducesResponseType(
+        StatusCodes.Status400BadRequest
+    )]
+    [ProducesResponseType(
+        StatusCodes.Status404NotFound
+    )]
+    [ProducesResponseType(
+        StatusCodes.Status409Conflict
+    )]
+    public async Task<
+        ActionResult<PatientResponse>
+    > Update(
         Guid id,
-        [FromBody] UpdatePatientRequest request,
+        [FromBody]
+        UpdatePatientRequest request,
         CancellationToken cancellationToken
     )
     {
-        var patient = await _dbContext.Patients
-            .SingleOrDefaultAsync(
-                item => item.Id == id,
-                cancellationToken
-            );
+        var patient =
+            await _dbContext.Patients
+                .SingleOrDefaultAsync(
+                    item =>
+                        item.Id == id,
+                    cancellationToken
+                );
 
         if (patient is null)
         {
@@ -190,15 +402,44 @@ public sealed class PatientsController : ControllerBase
         }
 
         var normalizedEmail =
-            request.Email.Trim().ToLowerInvariant();
+            request.Email
+                .Trim()
+                .ToLowerInvariant();
+
+        var linkedUser =
+            await _dbContext.Users
+                .SingleOrDefaultAsync(
+                    user =>
+                        user.PatientId == id,
+                    cancellationToken
+                );
+
+        if (
+            linkedUser is not null
+            && patient.Email
+                != normalizedEmail
+        )
+        {
+            return Problem(
+                statusCode:
+                    StatusCodes
+                        .Status409Conflict,
+                title:
+                    "E-mail vinculado a uma conta.",
+                detail:
+                    "O e-mail deste paciente está vinculado a uma conta de acesso e não pode ser alterado por este endpoint."
+            );
+        }
 
         var emailAlreadyExists =
-            await _dbContext.Patients.AnyAsync(
-                item =>
-                    item.Email == normalizedEmail
-                    && item.Id != id,
-                cancellationToken
-            );
+            await _dbContext.Patients
+                .AnyAsync(
+                    item =>
+                        item.Email
+                            == normalizedEmail
+                        && item.Id != id,
+                    cancellationToken
+                );
 
         if (emailAlreadyExists)
         {
@@ -215,10 +456,22 @@ public sealed class PatientsController : ControllerBase
                 request.Email,
                 request.Phone
             );
+
+            if (linkedUser is not null)
+            {
+                linkedUser.UpdateFullName(
+                    patient.FullName
+                );
+
+                linkedUser.PhoneNumber =
+                    patient.Phone;
+            }
         }
         catch (ArgumentException exception)
         {
-            return InvalidPatientData(exception.Message);
+            return InvalidPatientData(
+                exception.Message
+            );
         }
 
         try
@@ -228,7 +481,11 @@ public sealed class PatientsController : ControllerBase
             );
         }
         catch (DbUpdateException exception)
-            when (IsUniqueConstraintViolation(exception))
+            when (
+                IsUniqueConstraintViolation(
+                    exception
+                )
+            )
         {
             return PatientEmailConflict(
                 normalizedEmail
@@ -236,21 +493,35 @@ public sealed class PatientsController : ControllerBase
         }
 
         return Ok(
-            PatientResponse.FromEntity(patient)
+            PatientResponse.FromEntity(
+                patient
+            )
         );
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize(
+        Policy =
+            AuthorizationPolicies.AdminOnly
+    )]
+    [ProducesResponseType(
+        StatusCodes.Status204NoContent
+    )]
+    [ProducesResponseType(
+        StatusCodes.Status404NotFound
+    )]
     public async Task<IActionResult> Delete(
         Guid id,
         CancellationToken cancellationToken
     )
     {
-        var patient = await _dbContext.Patients
-            .SingleOrDefaultAsync(
-                item => item.Id == id,
-                cancellationToken
-            );
+        var patient =
+            await _dbContext.Patients
+                .SingleOrDefaultAsync(
+                    item =>
+                        item.Id == id,
+                    cancellationToken
+                );
 
         if (patient is null)
         {
@@ -264,6 +535,19 @@ public sealed class PatientsController : ControllerBase
 
         patient.Deactivate();
 
+        var linkedUser =
+            await _dbContext.Users
+                .SingleOrDefaultAsync(
+                    user =>
+                        user.PatientId == id,
+                    cancellationToken
+                );
+
+        if (linkedUser is not null)
+        {
+            linkedUser.Deactivate();
+        }
+
         await _dbContext.SaveChangesAsync(
             cancellationToken
         );
@@ -271,21 +555,31 @@ public sealed class PatientsController : ControllerBase
         return NoContent();
     }
 
-    private ObjectResult PatientNotFound(Guid id)
+    private ObjectResult PatientNotFound(
+        Guid id
+    )
     {
         return Problem(
-            statusCode: StatusCodes.Status404NotFound,
-            title: "Paciente não encontrado.",
+            statusCode:
+                StatusCodes
+                    .Status404NotFound,
+            title:
+                "Paciente não encontrado.",
             detail:
                 $"Não foi encontrado um paciente com o ID '{id}'."
         );
     }
 
-    private ObjectResult PatientCpfConflict(string cpf)
+    private ObjectResult PatientCpfConflict(
+        string cpf
+    )
     {
         return Problem(
-            statusCode: StatusCodes.Status409Conflict,
-            title: "CPF já cadastrado.",
+            statusCode:
+                StatusCodes
+                    .Status409Conflict,
+            title:
+                "CPF já cadastrado.",
             detail:
                 $"Já existe um paciente utilizando o CPF '{cpf}'."
         );
@@ -296,8 +590,11 @@ public sealed class PatientsController : ControllerBase
     )
     {
         return Problem(
-            statusCode: StatusCodes.Status409Conflict,
-            title: "E-mail já cadastrado.",
+            statusCode:
+                StatusCodes
+                    .Status409Conflict,
+            title:
+                "E-mail já cadastrado.",
             detail:
                 $"Já existe um paciente utilizando o e-mail '{email}'."
         );
@@ -308,20 +605,27 @@ public sealed class PatientsController : ControllerBase
     )
     {
         return Problem(
-            statusCode: StatusCodes.Status400BadRequest,
-            title: "Dados do paciente inválidos.",
-            detail: detail
+            statusCode:
+                StatusCodes
+                    .Status400BadRequest,
+            title:
+                "Dados do paciente inválidos.",
+            detail:
+                detail
         );
     }
 
-    private static bool IsUniqueConstraintViolation(
-        DbUpdateException exception
-    )
+    private static bool
+        IsUniqueConstraintViolation(
+            DbUpdateException exception
+        )
     {
-        return exception.InnerException is PostgresException
-        {
-            SqlState:
-                PostgresErrorCodes.UniqueViolation
-        };
+        return exception.InnerException
+            is PostgresException
+            {
+                SqlState:
+                    PostgresErrorCodes
+                        .UniqueViolation
+            };
     }
 }
