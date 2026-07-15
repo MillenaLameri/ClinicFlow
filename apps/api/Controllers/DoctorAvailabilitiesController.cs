@@ -1,6 +1,9 @@
+using ClinicFlow.Api.Authorization;
 using ClinicFlow.Api.Contracts.DoctorAvailabilities;
 using ClinicFlow.Api.Data;
 using ClinicFlow.Api.Models;
+using ClinicFlow.Api.Services.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -8,183 +11,231 @@ using Npgsql;
 namespace ClinicFlow.Api.Controllers;
 
 [ApiController]
-[Route("api/doctors/{doctorId:guid}/availabilities")]
-public sealed class DoctorAvailabilitiesController : ControllerBase
+[Route(
+    "api/doctors/{doctorId:guid}/availabilities"
+)]
+[Authorize(
+    Policy =
+        AuthorizationPolicies.AdminOrDoctor
+)]
+public sealed class DoctorAvailabilitiesController
+    : ControllerBase
 {
-    private readonly ClinicFlowDbContext _dbContext;
+    private readonly ClinicFlowDbContext
+        _dbContext;
+
+    private readonly CurrentUserService
+        _currentUser;
 
     public DoctorAvailabilitiesController(
-        ClinicFlowDbContext dbContext
+        ClinicFlowDbContext dbContext,
+        CurrentUserService currentUser
     )
     {
         _dbContext = dbContext;
+        _currentUser = currentUser;
     }
 
     [HttpGet]
-    [ProducesResponseType(
-        typeof(IReadOnlyCollection<DoctorAvailabilityResponse>),
-        StatusCodes.Status200OK
-    )]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<
-        ActionResult<IReadOnlyCollection<DoctorAvailabilityResponse>>
+        ActionResult<
+            IReadOnlyCollection<
+                DoctorAvailabilityResponse
+            >
+        >
     > GetAll(
         Guid doctorId,
-        [FromQuery] bool includeInactive = false,
-        CancellationToken cancellationToken = default
+        [FromQuery]
+        bool includeInactive = false,
+        CancellationToken cancellationToken =
+            default
     )
     {
-        var doctorExists = await _dbContext.Doctors
-            .AsNoTracking()
-            .AnyAsync(
-                doctor => doctor.Id == doctorId,
-                cancellationToken
-            );
+        if (!CanManageDoctor(doctorId))
+        {
+            return Forbid();
+        }
+
+        var doctorExists =
+            await _dbContext.Doctors
+                .AsNoTracking()
+                .AnyAsync(
+                    doctor =>
+                        doctor.Id == doctorId,
+                    cancellationToken
+                );
 
         if (!doctorExists)
         {
-            return DoctorNotFound(doctorId);
+            return DoctorNotFound(
+                doctorId
+            );
         }
 
-        var query = _dbContext.DoctorAvailabilities
-            .AsNoTracking()
-            .Where(
-                availability =>
-                    availability.DoctorId == doctorId
-            );
+        var query =
+            _dbContext
+                .DoctorAvailabilities
+                .AsNoTracking()
+                .Where(
+                    availability =>
+                        availability.DoctorId
+                        == doctorId
+                );
 
         if (!includeInactive)
         {
             query = query.Where(
-                availability => availability.IsActive
+                availability =>
+                    availability.IsActive
             );
         }
 
-        var availabilities = await query
-            .OrderBy(availability => availability.DayOfWeek)
-            .ThenBy(availability => availability.StartTime)
-            .Select(availability =>
-                new DoctorAvailabilityResponse(
-                    availability.Id,
-                    availability.DoctorId,
-                    availability.DayOfWeek,
-                    availability.StartTime,
-                    availability.EndTime,
-                    availability.SlotDurationMinutes,
-                    availability.IsActive,
-                    availability.CreatedAtUtc
+        var availabilities =
+            await query
+                .OrderBy(
+                    availability =>
+                        availability.DayOfWeek
                 )
-            )
-            .ToListAsync(cancellationToken);
+                .ThenBy(
+                    availability =>
+                        availability.StartTime
+                )
+                .ToListAsync(
+                    cancellationToken
+                );
 
-        return Ok(availabilities);
+        var response = availabilities
+            .Select(ToResponse)
+            .ToList();
+
+        return Ok(response);
     }
 
     [HttpGet("{availabilityId:guid}")]
-    [ProducesResponseType(
-        typeof(DoctorAvailabilityResponse),
-        StatusCodes.Status200OK
-    )]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<
-        ActionResult<DoctorAvailabilityResponse>
+        ActionResult<
+            DoctorAvailabilityResponse
+        >
     > GetById(
         Guid doctorId,
         Guid availabilityId,
         CancellationToken cancellationToken
     )
     {
+        if (!CanManageDoctor(doctorId))
+        {
+            return Forbid();
+        }
+
         var availability =
-            await _dbContext.DoctorAvailabilities
+            await _dbContext
+                .DoctorAvailabilities
                 .AsNoTracking()
                 .SingleOrDefaultAsync(
                     item =>
-                        item.Id == availabilityId
-                        && item.DoctorId == doctorId,
+                        item.Id
+                            == availabilityId
+                        && item.DoctorId
+                            == doctorId,
                     cancellationToken
                 );
 
         if (availability is null)
         {
             return AvailabilityNotFound(
-                doctorId,
                 availabilityId
             );
         }
 
         return Ok(
-            DoctorAvailabilityResponse.FromEntity(
-                availability
-            )
+            ToResponse(availability)
         );
     }
 
     [HttpPost]
-    [ProducesResponseType(
-        typeof(DoctorAvailabilityResponse),
-        StatusCodes.Status201Created
-    )]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<
-        ActionResult<DoctorAvailabilityResponse>
+        ActionResult<
+            DoctorAvailabilityResponse
+        >
     > Create(
         Guid doctorId,
-        [FromBody] CreateDoctorAvailabilityRequest request,
+        [FromBody]
+        CreateDoctorAvailabilityRequest request,
         CancellationToken cancellationToken
     )
     {
-        var doctorExists = await _dbContext.Doctors
-            .AsNoTracking()
-            .AnyAsync(
-                doctor =>
-                    doctor.Id == doctorId
-                    && doctor.IsActive,
-                cancellationToken
-            );
+        if (!CanManageDoctor(doctorId))
+        {
+            return Forbid();
+        }
+
+        var doctorExists =
+            await _dbContext.Doctors
+                .AsNoTracking()
+                .AnyAsync(
+                    doctor =>
+                        doctor.Id == doctorId
+                        && doctor.IsActive,
+                    cancellationToken
+                );
 
         if (!doctorExists)
         {
-            return ActiveDoctorNotFound(doctorId);
+            return DoctorNotFound(
+                doctorId
+            );
         }
 
         DoctorAvailability availability;
 
         try
         {
-            availability = new DoctorAvailability(
-                doctorId,
-                request.DayOfWeek,
-                request.StartTime,
-                request.EndTime,
-                request.SlotDurationMinutes
-            );
+            availability =
+                new DoctorAvailability(
+                    doctorId,
+                    request.DayOfWeek,
+                    request.StartTime,
+                    request.EndTime,
+                    request
+                        .SlotDurationMinutes
+                );
         }
         catch (ArgumentException exception)
         {
-            return InvalidAvailability(exception.Message);
-        }
-
-        var hasOverlap = await HasOverlappingAvailabilityAsync(
-            doctorId,
-            request.DayOfWeek,
-            request.StartTime,
-            request.EndTime,
-            ignoredAvailabilityId: null,
-            cancellationToken
-        );
-
-        if (hasOverlap)
-        {
-            return AvailabilityOverlapConflict(
-                request.DayOfWeek,
-                request.StartTime,
-                request.EndTime
+            return InvalidAvailability(
+                exception.Message
             );
         }
 
-        _dbContext.DoctorAvailabilities.Add(availability);
+        var hasOverlap =
+            await _dbContext
+                .DoctorAvailabilities
+                .AsNoTracking()
+                .AnyAsync(
+                    item =>
+                        item.DoctorId
+                            == doctorId
+                        && item.DayOfWeek
+                            == availability
+                                .DayOfWeek
+                        && item.IsActive
+                        && item.StartTime
+                            < availability
+                                .EndTime
+                        && availability
+                            .StartTime
+                            < item.EndTime,
+                    cancellationToken
+                );
+
+        if (hasOverlap)
+        {
+            return AvailabilityConflict();
+        }
+
+        _dbContext
+            .DoctorAvailabilities
+            .Add(availability);
 
         try
         {
@@ -193,94 +244,78 @@ public sealed class DoctorAvailabilitiesController : ControllerBase
             );
         }
         catch (DbUpdateException exception)
-            when (IsUniqueConstraintViolation(exception))
+            when (
+                IsUniqueConstraintViolation(
+                    exception
+                )
+            )
         {
-            return AvailabilityOverlapConflict(
-                request.DayOfWeek,
-                request.StartTime,
-                request.EndTime
-            );
+            return AvailabilityConflict();
         }
-
-        var response =
-            DoctorAvailabilityResponse.FromEntity(
-                availability
-            );
 
         return CreatedAtAction(
             nameof(GetById),
             new
             {
                 doctorId,
-                availabilityId = availability.Id
+                availabilityId =
+                    availability.Id
             },
-            response
+            ToResponse(availability)
         );
     }
 
     [HttpPut("{availabilityId:guid}")]
-    [ProducesResponseType(
-        typeof(DoctorAvailabilityResponse),
-        StatusCodes.Status200OK
-    )]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<
-        ActionResult<DoctorAvailabilityResponse>
+        ActionResult<
+            DoctorAvailabilityResponse
+        >
     > Update(
         Guid doctorId,
         Guid availabilityId,
-        [FromBody] UpdateDoctorAvailabilityRequest request,
+        [FromBody]
+        UpdateDoctorAvailabilityRequest request,
         CancellationToken cancellationToken
     )
     {
-        var doctorExists = await _dbContext.Doctors
-            .AsNoTracking()
-            .AnyAsync(
-                doctor =>
-                    doctor.Id == doctorId
-                    && doctor.IsActive,
-                cancellationToken
-            );
+        if (!CanManageDoctor(doctorId))
+        {
+            return Forbid();
+        }
+
+        var doctorExists =
+            await _dbContext.Doctors
+                .AsNoTracking()
+                .AnyAsync(
+                    doctor =>
+                        doctor.Id == doctorId
+                        && doctor.IsActive,
+                    cancellationToken
+                );
 
         if (!doctorExists)
         {
-            return ActiveDoctorNotFound(doctorId);
+            return DoctorNotFound(
+                doctorId
+            );
         }
 
         var availability =
-            await _dbContext.DoctorAvailabilities
+            await _dbContext
+                .DoctorAvailabilities
                 .SingleOrDefaultAsync(
                     item =>
-                        item.Id == availabilityId
-                        && item.DoctorId == doctorId,
+                        item.Id
+                            == availabilityId
+                        && item.DoctorId
+                            == doctorId,
                     cancellationToken
                 );
 
         if (availability is null)
         {
             return AvailabilityNotFound(
-                doctorId,
                 availabilityId
-            );
-        }
-
-        var hasOverlap = await HasOverlappingAvailabilityAsync(
-            doctorId,
-            request.DayOfWeek,
-            request.StartTime,
-            request.EndTime,
-            availabilityId,
-            cancellationToken
-        );
-
-        if (hasOverlap)
-        {
-            return AvailabilityOverlapConflict(
-                request.DayOfWeek,
-                request.StartTime,
-                request.EndTime
             );
         }
 
@@ -290,12 +325,43 @@ public sealed class DoctorAvailabilitiesController : ControllerBase
                 request.DayOfWeek,
                 request.StartTime,
                 request.EndTime,
-                request.SlotDurationMinutes
+                request
+                    .SlotDurationMinutes
             );
         }
         catch (ArgumentException exception)
         {
-            return InvalidAvailability(exception.Message);
+            return InvalidAvailability(
+                exception.Message
+            );
+        }
+
+        var hasOverlap =
+            await _dbContext
+                .DoctorAvailabilities
+                .AsNoTracking()
+                .AnyAsync(
+                    item =>
+                        item.Id
+                            != availabilityId
+                        && item.DoctorId
+                            == doctorId
+                        && item.DayOfWeek
+                            == availability
+                                .DayOfWeek
+                        && item.IsActive
+                        && item.StartTime
+                            < availability
+                                .EndTime
+                        && availability
+                            .StartTime
+                            < item.EndTime,
+                    cancellationToken
+                );
+
+        if (hasOverlap)
+        {
+            return AvailabilityConflict();
         }
 
         try
@@ -305,44 +371,47 @@ public sealed class DoctorAvailabilitiesController : ControllerBase
             );
         }
         catch (DbUpdateException exception)
-            when (IsUniqueConstraintViolation(exception))
+            when (
+                IsUniqueConstraintViolation(
+                    exception
+                )
+            )
         {
-            return AvailabilityOverlapConflict(
-                request.DayOfWeek,
-                request.StartTime,
-                request.EndTime
-            );
+            return AvailabilityConflict();
         }
 
         return Ok(
-            DoctorAvailabilityResponse.FromEntity(
-                availability
-            )
+            ToResponse(availability)
         );
     }
 
     [HttpDelete("{availabilityId:guid}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(
         Guid doctorId,
         Guid availabilityId,
         CancellationToken cancellationToken
     )
     {
+        if (!CanManageDoctor(doctorId))
+        {
+            return Forbid();
+        }
+
         var availability =
-            await _dbContext.DoctorAvailabilities
+            await _dbContext
+                .DoctorAvailabilities
                 .SingleOrDefaultAsync(
                     item =>
-                        item.Id == availabilityId
-                        && item.DoctorId == doctorId,
+                        item.Id
+                            == availabilityId
+                        && item.DoctorId
+                            == doctorId,
                     cancellationToken
                 );
 
         if (availability is null)
         {
             return AvailabilityNotFound(
-                doctorId,
                 availabilityId
             );
         }
@@ -361,96 +430,108 @@ public sealed class DoctorAvailabilitiesController : ControllerBase
         return NoContent();
     }
 
-    private async Task<bool> HasOverlappingAvailabilityAsync(
-        Guid doctorId,
-        WeekDay dayOfWeek,
-        TimeOnly startTime,
-        TimeOnly endTime,
-        Guid? ignoredAvailabilityId,
-        CancellationToken cancellationToken
+    private bool CanManageDoctor(
+        Guid doctorId
     )
     {
-        return await _dbContext.DoctorAvailabilities
-            .AsNoTracking()
-            .AnyAsync(
-                availability =>
-                    availability.DoctorId == doctorId
-                    && availability.DayOfWeek == dayOfWeek
-                    && availability.IsActive
-                    && (
-                        ignoredAvailabilityId == null
-                        || availability.Id
-                            != ignoredAvailabilityId.Value
-                    )
-                    && availability.StartTime < endTime
-                    && startTime < availability.EndTime,
-                cancellationToken
-            );
+        if (_currentUser.IsAdmin)
+        {
+            return true;
+        }
+
+        return
+            _currentUser.IsDoctor
+            && _currentUser.DoctorId
+                is Guid currentDoctorId
+            && currentDoctorId
+                == doctorId;
     }
 
-    private ObjectResult DoctorNotFound(Guid doctorId)
+    private static
+        DoctorAvailabilityResponse
+        ToResponse(
+            DoctorAvailability availability
+        )
     {
-        return Problem(
-            statusCode: StatusCodes.Status404NotFound,
-            title: "Médico não encontrado.",
-            detail:
-                $"Não foi encontrado um médico com o ID '{doctorId}'."
+        return new DoctorAvailabilityResponse(
+            availability.Id,
+            availability.DoctorId,
+            availability.DayOfWeek,
+            availability.StartTime,
+            availability.EndTime,
+            availability.SlotDurationMinutes,
+            availability.IsActive,
+            availability.CreatedAtUtc
         );
     }
 
-    private ObjectResult ActiveDoctorNotFound(Guid doctorId)
+    private ObjectResult DoctorNotFound(
+        Guid doctorId
+    )
     {
         return Problem(
-            statusCode: StatusCodes.Status404NotFound,
-            title: "Médico ativo não encontrado.",
+            statusCode:
+                StatusCodes.Status404NotFound,
+            title:
+                "Médico não encontrado.",
             detail:
                 $"Não foi encontrado um médico ativo com o ID '{doctorId}'."
         );
     }
 
-    private ObjectResult AvailabilityNotFound(
-        Guid doctorId,
-        Guid availabilityId
-    )
+    private ObjectResult
+        AvailabilityNotFound(
+            Guid availabilityId
+        )
     {
         return Problem(
-            statusCode: StatusCodes.Status404NotFound,
-            title: "Disponibilidade não encontrada.",
+            statusCode:
+                StatusCodes.Status404NotFound,
+            title:
+                "Disponibilidade não encontrada.",
             detail:
-                $"A disponibilidade '{availabilityId}' não foi encontrada para o médico '{doctorId}'."
+                $"Não foi encontrada uma disponibilidade com o ID '{availabilityId}'."
         );
     }
 
-    private ObjectResult InvalidAvailability(string detail)
+    private ObjectResult
+        InvalidAvailability(
+            string detail
+        )
     {
         return Problem(
-            statusCode: StatusCodes.Status400BadRequest,
-            title: "Disponibilidade inválida.",
+            statusCode:
+                StatusCodes.Status400BadRequest,
+            title:
+                "Disponibilidade inválida.",
             detail: detail
         );
     }
 
-    private ObjectResult AvailabilityOverlapConflict(
-        WeekDay dayOfWeek,
-        TimeOnly startTime,
-        TimeOnly endTime
-    )
+    private ObjectResult
+        AvailabilityConflict()
     {
         return Problem(
-            statusCode: StatusCodes.Status409Conflict,
-            title: "Conflito de horários.",
+            statusCode:
+                StatusCodes.Status409Conflict,
+            title:
+                "Conflito de horário.",
             detail:
-                $"O médico já possui um período que se sobrepõe a {dayOfWeek}, das {startTime:HH\\:mm} às {endTime:HH\\:mm}."
+                "O médico já possui uma disponibilidade ativa que se sobrepõe ao período informado."
         );
     }
 
-    private static bool IsUniqueConstraintViolation(
-        DbUpdateException exception
-    )
+    private static bool
+        IsUniqueConstraintViolation(
+            DbUpdateException exception
+        )
     {
-        return exception.InnerException is PostgresException
-        {
-            SqlState: PostgresErrorCodes.UniqueViolation
-        };
+        return exception.InnerException
+            is PostgresException
+            {
+                SqlState:
+                    PostgresErrorCodes
+                        .UniqueViolation
+            };
     }
 }

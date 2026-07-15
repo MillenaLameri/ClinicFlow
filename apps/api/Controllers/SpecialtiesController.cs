@@ -1,3 +1,5 @@
+using ClinicFlow.Api.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using ClinicFlow.Api.Contracts.Specialties;
 using ClinicFlow.Api.Data;
 using ClinicFlow.Api.Models;
@@ -9,6 +11,9 @@ namespace ClinicFlow.Api.Controllers;
 
 [ApiController]
 [Route("api/specialties")]
+[Authorize(
+    Policy = AuthorizationPolicies.ClinicUser
+)]
 public sealed class SpecialtiesController : ControllerBase
 {
     private readonly ClinicFlowDbContext _dbContext;
@@ -51,6 +56,9 @@ public sealed class SpecialtiesController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [Authorize(
+        Policy = AuthorizationPolicies.AdminOnly
+    )]
     [ProducesResponseType(
         typeof(SpecialtyResponse),
         StatusCodes.Status200OK
@@ -77,6 +85,9 @@ public sealed class SpecialtiesController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(
+        Policy = AuthorizationPolicies.AdminOnly
+    )]
     [ProducesResponseType(
         typeof(SpecialtyResponse),
         StatusCodes.Status201Created
@@ -135,6 +146,9 @@ public sealed class SpecialtiesController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(
+        Policy = AuthorizationPolicies.AdminOnly
+    )]
     [ProducesResponseType(
         typeof(SpecialtyResponse),
         StatusCodes.Status200OK
@@ -198,6 +212,9 @@ public sealed class SpecialtiesController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize(
+        Policy = AuthorizationPolicies.AdminOnly
+    )]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(
