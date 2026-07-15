@@ -139,6 +139,12 @@ builder.Services
     .AddSignInManager()
     .AddDefaultTokenProviders();
 
+builder.Services.Configure<AdminSeedOptions>(
+    builder.Configuration.GetSection(
+        AdminSeedOptions.SectionName
+    )
+);
+
 var jwtSection =
     builder.Configuration.GetSection(
         JwtOptions.SectionName
@@ -324,6 +330,10 @@ builder.Services.AddScoped<
 >();
 
 var app = builder.Build();
+
+await AdminSeeder.SeedAsync(
+    app.Services
+);
 
 if (app.Environment.IsDevelopment())
 {
