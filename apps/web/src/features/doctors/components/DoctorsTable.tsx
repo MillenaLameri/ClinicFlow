@@ -1,12 +1,16 @@
-import { Mail, Phone, Stethoscope } from "lucide-react";
+import { Mail, Pencil, Phone, Stethoscope } from "lucide-react";
+
 import { DoctorStatusBadge } from "./DoctorStatusBadge";
+
 import type { Doctor } from "../types/doctor.types";
 
 type DoctorsTableProps = {
   doctors: Doctor[];
+
+  onEdit: (doctor: Doctor) => void;
 };
 
-export function DoctorsTable({ doctors }: DoctorsTableProps) {
+export function DoctorsTable({ doctors, onEdit }: DoctorsTableProps) {
   if (doctors.length === 0) {
     return (
       <div
@@ -83,7 +87,7 @@ export function DoctorsTable({ doctors }: DoctorsTableProps) {
           <table
             className="
               w-full
-              min-w-[850px]
+              min-w-[900px]
               border-collapse
               text-left
             "
@@ -164,6 +168,21 @@ export function DoctorsTable({ doctors }: DoctorsTableProps) {
                   "
                 >
                   Status
+                </th>
+
+                <th
+                  className="
+                    px-5
+                    py-4
+                    text-right
+                    text-xs
+                    font-semibold
+                    uppercase
+                    tracking-wide
+                    text-slate-400
+                  "
+                >
+                  Ações
                 </th>
               </tr>
             </thead>
@@ -310,6 +329,39 @@ export function DoctorsTable({ doctors }: DoctorsTableProps) {
                   >
                     <DoctorStatusBadge isActive={doctor.isActive} />
                   </td>
+
+                  <td
+                    className="
+                        px-5
+                        py-4
+                        text-right
+                      "
+                  >
+                    <button
+                      type="button"
+                      onClick={() => onEdit(doctor)}
+                      aria-label={`Editar ${doctor.fullName}`}
+                      title="Editar médico"
+                      className="
+                          inline-flex
+                          size-9
+                          items-center
+                          justify-center
+                          rounded-xl
+                          text-slate-400
+                          transition
+
+                          hover:bg-[#EDF3FF]
+                          hover:text-[#2448A5]
+
+                          focus:outline-none
+                          focus:ring-2
+                          focus:ring-[#2448A5]/20
+                        "
+                    >
+                      <Pencil size={17} />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -440,10 +492,42 @@ export function DoctorsTable({ doctors }: DoctorsTableProps) {
                   >
                     <Phone size={14} />
 
-                    {doctor.phone}
+                    <span>{doctor.phone}</span>
                   </div>
                 )}
               </div>
+
+              <button
+                type="button"
+                onClick={() => onEdit(doctor)}
+                className="
+                    mt-4
+                    flex
+                    h-10
+                    w-full
+                    items-center
+                    justify-center
+                    gap-2
+                    rounded-xl
+                    border
+                    border-slate-200
+                    bg-white
+                    text-xs
+                    font-semibold
+                    text-[#2448A5]
+                    transition
+
+                    hover:border-[#2448A5]/30
+                    hover:bg-[#EDF3FF]
+
+                    focus:outline-none
+                    focus:ring-2
+                    focus:ring-[#2448A5]/20
+                  "
+              >
+                <Pencil size={15} />
+                Editar médico
+              </button>
             </div>
           </article>
         ))}

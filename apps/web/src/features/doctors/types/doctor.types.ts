@@ -22,3 +22,19 @@ export type GetDoctorsParams = {
   specialtyId?: string;
   includeInactive?: boolean;
 };
+
+export type CreateDoctorRequest = {
+  fullName: string;
+  crmNumber: string;
+  crmState: string;
+  email: string;
+  phone: string | null;
+  specialtyId: string;
+};
+
+export type UpdateDoctorRequest = {
+  fullName: string;
+  email: string;
+  phone: string | null;
+  specialtyId: string;
+};

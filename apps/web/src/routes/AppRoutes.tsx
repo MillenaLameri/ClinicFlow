@@ -7,7 +7,7 @@ import { AdminDashboardPage } from "@/pages/dashboard/admin/AdminDashboardPage";
 import { DoctorDashboardPage } from "@/pages/dashboard/doctor/DoctorDashboardPage";
 import { PatientDashboardPage } from "@/pages/dashboard/patient/PatientDashboardPage";
 import { DoctorsPage } from "@/pages/admin/doctors/DoctorsPage";
-
+import { SpecialtiesPage } from "@/pages/admin/specialties/SpecialtiesPage";
 
 export function AppRoutes() {
   return (
@@ -60,6 +60,15 @@ export function AppRoutes() {
       />
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
+      <Route
+        path="/admin/specialties"
+        element={
+          <RoleProtectedRoute allowedRoles={["Admin"]}>
+            <SpecialtiesPage />
+          </RoleProtectedRoute>
+        }
+      />
 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

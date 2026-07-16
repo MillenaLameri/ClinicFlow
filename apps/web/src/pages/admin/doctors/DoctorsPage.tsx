@@ -1,9 +1,12 @@
 import { Plus, Search, Stethoscope } from "lucide-react";
 import { useState } from "react";
+import type { FormEvent } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { DoctorFormDialog } from "@/features/doctors/components/DoctorFormDialog";
 import { DoctorsPagination } from "@/features/doctors/components/DoctorsPagination";
 import { DoctorsTable } from "@/features/doctors/components/DoctorsTable";
 import { useDoctors } from "@/features/doctors/hooks/useDoctors";
+import type { Doctor } from "@/features/doctors/types/doctor.types";
 
 const PAGE_SIZE = 10;
 
@@ -16,6 +19,10 @@ export function DoctorsPage() {
 
   const [includeInactive, setIncludeInactive] = useState(false);
 
+  const [isDoctorDialogOpen, setIsDoctorDialogOpen] = useState(false);
+
+  const [editingDoctor, setEditingDoctor] = useState<Doctor | null>(null);
+
   const { data, isLoading, isError, refetch } = useDoctors({
     page,
     pageSize: PAGE_SIZE,
@@ -23,7 +30,25 @@ export function DoctorsPage() {
     includeInactive,
   });
 
-  function handleSearch(event: React.FormEvent<HTMLFormElement>) {
+  function handleCreateDoctor() {
+    setEditingDoctor(null);
+
+    setIsDoctorDialogOpen(true);
+  }
+
+  function handleEditDoctor(doctor: Doctor) {
+    setEditingDoctor(doctor);
+
+    setIsDoctorDialogOpen(true);
+  }
+
+  function handleCloseDoctorDialog() {
+    setIsDoctorDialogOpen(false);
+
+    setEditingDoctor(null);
+  }
+
+  function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     setPage(1);
@@ -105,6 +130,7 @@ export function DoctorsPage() {
 
           <button
             type="button"
+            onClick={handleCreateDoctor}
             className="
               flex
               h-11
@@ -121,6 +147,10 @@ export function DoctorsPage() {
               transition
 
               hover:bg-[#172D6B]
+
+              focus:outline-none
+              focus:ring-2
+              focus:ring-[#2448A5]/20
 
               sm:w-auto
             "
@@ -226,6 +256,10 @@ export function DoctorsPage() {
                   transition
 
                   hover:bg-slate-50
+
+                  focus:outline-none
+                  focus:ring-2
+                  focus:ring-[#2448A5]/20
                 "
               >
                 Buscar
@@ -270,7 +304,7 @@ export function DoctorsPage() {
 
           {data && (
             <>
-              <DoctorsTable doctors={data.items} />
+              <DoctorsTable doctors={data.items} onEdit={handleEditDoctor} />
 
               <DoctorsPagination
                 page={data.page}
@@ -284,6 +318,13 @@ export function DoctorsPage() {
           )}
         </div>
       </div>
+
+      <DoctorFormDialog
+        isOpen={isDoctorDialogOpen}
+        mode={editingDoctor ? "edit" : "create"}
+        doctor={editingDoctor}
+        onClose={handleCloseDoctorDialog}
+      />
     </DashboardLayout>
   );
 }
@@ -305,49 +346,49 @@ function DoctorsLoading() {
         <div
           key={index}
           className="
-            flex
-            animate-pulse
-            items-center
-            gap-4
-            border-b
-            border-slate-100
-            p-5
+              flex
+              animate-pulse
+              items-center
+              gap-4
+              border-b
+              border-slate-100
+              p-5
 
-            last:border-none
-          "
+              last:border-none
+            "
         >
           <div
             className="
-              size-10
-              shrink-0
-              rounded-xl
-              bg-slate-100
-            "
+                size-10
+                shrink-0
+                rounded-xl
+                bg-slate-100
+              "
           />
 
           <div
             className="
-              flex-1
-            "
+                flex-1
+              "
           >
             <div
               className="
-                h-4
-                w-40
-                rounded
-                bg-slate-100
-              "
+                  h-4
+                  w-40
+                  rounded
+                  bg-slate-100
+                "
             />
 
             <div
               className="
-                mt-2
-                h-3
-                w-56
-                max-w-full
-                rounded
-                bg-slate-100
-              "
+                  mt-2
+                  h-3
+                  w-56
+                  max-w-full
+                  rounded
+                  bg-slate-100
+                "
             />
           </div>
         </div>
@@ -402,6 +443,13 @@ function DoctorsError({ onRetry }: DoctorsErrorProps) {
           text-sm
           font-semibold
           text-white
+          transition
+
+          hover:bg-red-700
+
+          focus:outline-none
+          focus:ring-2
+          focus:ring-red-600/20
         "
       >
         Tentar novamente

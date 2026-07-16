@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   LogOut,
   Stethoscope,
+  Tags,
   Users,
   X,
 } from "lucide-react";
@@ -25,6 +26,11 @@ const navigationItems = [
     label: "Médicos",
     path: "/admin/doctors",
     icon: Stethoscope,
+  },
+  {
+    label: "Especialidades",
+    path: "/admin/specialties",
+    icon: Tags,
   },
   {
     label: "Pacientes",
